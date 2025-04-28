@@ -2,14 +2,14 @@
 ;                                                                             ;
 ; Plik           : arch_02.asm                                                ;
 ; Format         : COM                                                        ;
-; Cwiczenie      : Napisaæ program, który konwertowaæ bêdzie dwie liczby	  ;
-;				   ca³kowite z przedzia³u [-32768..32767] z postaci ASCII do  ;
-;				   postaci obliczeniowej w kodzie U2, dodawaæ je do siebie,   ;
-;				   a otrzymany wynik wyœwietlaæ na ekranie.					  ;
+; Cwiczenie      : NapisaÄ‡ program, ktÃ³ry konwertowaÄ‡ bÄ™dzie dwie liczby	  ;
+;				   caÅ‚kowite z przedziaÅ‚u [-32768..32767] z postaci ASCII do  ;
+;				   postaci obliczeniowej w kodzie U2, dodawaÄ‡ je do siebie,   ;
+;				   a otrzymany wynik wyÅ›wietlaÄ‡ na ekranie.					  ;
 ; Autorzy        : Emilia Masiak, Martyna Plutowska, 7.1, piatek, 12:15		  ;
 ; Data zaliczenia: 14.04.2025                                                 ;
-; Cel            : Zapoznanie siê z zasadami reprezentacji liczb w kodzie U2  ;
-;				   i znaków w kodzie ASCII.                                   ;
+; Cel            : Zapoznanie siÄ™ z zasadami reprezentacji liczb w kodzie U2  ;
+;				   i znakÃ³w w kodzie ASCII.                                   ;
 ;                                                                             ;
 ;=============================================================================;
 
@@ -21,31 +21,32 @@ Kod             SEGMENT
                 ASSUME  CS:Kod, DS:Kod, SS:Kod 
 
 Start:
-                jmp    Poczatek 
+                jmp    Poczatek
 			
-Napis           DB      "Podaj liczbe z zakresu (-32768; 32767): $"
-NapisError      DB      "Liczba z poza zakresu!! Koncze program$"
-NapisOutOfRange DB		"Wynik poza zakresem signed 16 bit int! Koncze program$"
+Napis			DB      "Podaj liczbe z zakresu (-32768; 32767): $"
+NapisError		DB      "Liczba z poza zakresu!! Koncze program$"
+NapisWynik		DB		"Wynik dodawania to: $"
+NapisNegZero	DB		"-65536$"
+
 ; ---- ASCII inputs
 input1			DB		7		; max chars the user can input + CR 
 				DB		?		; acctual number of chars that user entered (filled by DOS)
-				DB		6 DUP(0); 6 bytes for the chars
+				DB		7 DUP(0); 6 bytes for the chars + CR
 input2			DB		7
 				DB		?
-				DB		6 DUP(0)
+				DB		7 DUP(0)
 ; ---- ASCII inputs converted to int
 liczba1			DW		?
 liczba2			DW		?
 
 ; ---- result in int
-wynik			DW		?
+wynik			DW		0
+
 ; ---- result in ASCII
-output			DW		6 DUP(0), "$"
+output			DB		6 DUP(0), "$"
+
 ; ---- Helper flag to convert numbers to U2
 bIsNeg			DB		0
-
-big				DD		?
-
 
 
 Poczatek:
@@ -58,13 +59,14 @@ Poczatek:
 				
 				; get the first input
 				mov ah, 0Ah
-				lea dx, input1		; put addres of input1 to dx
+				mov dx, OFFSET input1		; put addres of input1 to dx
 				int 21h
+				
 				call PrintNewLine	; add new line so the next text will be on new line
 
 				mov cl, input1+1 	; the number of digits the user entered
 				xor ax, ax		 	; zero out the ax
-				lea si, input1+2 	; addres of the first character
+				mov si, OFFSET input1+2 	; addres of the first character
 				
 				call AsciiToInt 	; convert ascii to number and convert to U2 (ax and wynik will have the output)
 				
@@ -79,28 +81,36 @@ Poczatek:
 				
 				; get the second input
 				mov ah, 0Ah
-				lea dx, input2
+				mov dx, OFFSET input2
 				int 21h
+				
 				call PrintNewLine ; add new line after the text
 				
 				mov cl, input2+1
 				xor ax, ax
-				lea si, input2+2
+				mov si, OFFSET input2+2
 				
 				call AsciiToInt ; ax and wynik will have the output
 				
 				mov liczba2, ax
 				mov wynik, 0
+				
+				mov ah, 09h
+                mov dx, OFFSET NapisWynik
+                int 21h
 
 ; -------- ADD THE NUMBERS
-				add liczba1, ax ; liczba1 + liczba2 (result in liczba1)
+				mov ax, liczba1
+				mov bx, liczba2
+				add ax, bx ; liczba1 + liczba2 (result in liczba1)
 				jo HandleOverflow
-				mov ax, liczba1 ; we can't directly move from one var to another, so we have to use a register
 				mov wynik, ax
-
+				
 ; -------- PRINT THE RESULT	
-; 		-- Print minus sign if the result is negative		
-				test ax, ax	  ; performs bitwise AND operation (ax = wynik), sets the SF (sign flag) for the jump, the result is discarded
+
+; 		-- Print minus sign if the result is negative	
+				mov ax, wynik	
+				test ax, ax	  ; performs bitwise AND operation (ax = zmeinna wynik), sets the SF (sign flag) for the jump, the result is discarded
 				
 				jns NotSigned ; jump if not signed (if the SF is not set)
 				
@@ -118,7 +128,7 @@ Poczatek:
 				call CountDigits; count how many digits does the result have (result in cx)
 				
 				mov ax, wynik
-				lea si, wynik	; move the addres of the result to the si
+				mov si, OFFSET wynik	; move the addres of the result to the si
 				xor ax, ax
 				mov ax, [si]	; move the result to ax
 
@@ -136,8 +146,8 @@ Poczatek:
 										  ; -1 bc byte count starts with 0
 				loop IntToAscii ; decrease cx and go to the next iteration
 				
-; 		-- Print the converted number						
-				mov ah, 09h	
+; 		-- Print the converted number	
+				mov ah, 09h
                 mov dx, OFFSET output
                 int 21h
 			
@@ -146,28 +156,60 @@ Poczatek:
 
 ; -------- OVERFLOW HANDLING
 HandleOverflow:
-				; handle 
 				mov ax, liczba1
 				cwd			; sign-extend into DX:AX
 				
 				mov bx, dx	; Save high word of first number
 				mov cx, ax	; Save low word of first number
 				
+				; BX:CX
+				
 				mov ax, liczba2
 				cwd			; sign-extend into DX:AX
 				
-				add cx, ax
-				adc bx, dx 
+				; DX:AX
 				
-				; result in BX:CX
-				;mov word ptr [big], cx       ; store low word first (little endian)
-				;mov word ptr [big+2], bx     ; store high word
+				add cx, ax	; add
+				adc bx, dx 	; add with a carry
+				
+				; result is in bx:cx
+				
+				
+				; convert BX:CX to neg if the number is neg
+				
+				test bx, 8000h ; 8000h = 1000 0000 0000 0000. Only tests the most significant bit (the sign bit)
+				jz NotNegative3
+
+				; --- Negative: convert to positive ---
+				neg cx
+				neg bx
+				
+				test cx, cx
+				;cmp cx, 0
+				
+				jz NegativeZero
 				
 				; convert 32 result to ascii
-				mov ah, 09h
-                mov dx, OFFSET NapisOutOfRange
+				; Print '-'
+				mov ah, 02h
+				mov dl, '-'
+				int 21h
+				
+	NotNegative3:
+				; result in BX:CX
+				mov wynik, cx       ; store low word first (little endian)
+				;mov word ptr [big+2], bx     ; store high word
+
+				mov ax, wynik
+				call CountDigits	
+				
+				mov ax, wynik			
+					
+				jmp IntToAscii
+	NegativeZero:	
+				mov ah, 09h	
+                mov dx, OFFSET NapisNegZero
                 int 21h
-			
 				jmp Koniec
 		
 ; ---------------- FUNKCJE
@@ -183,15 +225,15 @@ PrintNewLine PROC
 				ret
 PrintNewLine ENDP
 
-; ---------------- @TODO comment this function
+
 AsciiToInt PROC
-				mov bIsNeg, 0
-				mov bl, [si]
-				cmp bl, '-'
+				mov bIsNeg, 0	; reset IsNeg flag
+				mov bl, [si]	; move first digit to bl
+				cmp bl, '-'		; check if the first digit is a minus (if the number is negative)
 				jne NotNegative
-				inc si
-				dec cl
-				mov bIsNeg, 1
+				inc si			; if number is negative we have to skip the first digit (the minus sign) so we increase si (to get the next digit)
+				dec cl			; and decrease cl (number of digits)
+				mov bIsNeg, 1	; and set the IsNeg flag
 	NotNegative:
 	petla:
 				mov bl, [si]
@@ -214,6 +256,7 @@ AsciiToInt PROC
 				jae PrintError
 				
 				neg wynik		; converts number from natural code to the U2 (negates the number and adds 1)
+				
 				mov ax, wynik
 				ret
 	NotNegative2:	
